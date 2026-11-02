@@ -18,6 +18,13 @@ import { formatTrackErrorReason } from "./resolve.js";
 
 const EMPTY_CHANNEL_TIMER_KEY = "emptyChannelTimer";
 
+const NODE_RETRY_DELAY_MS = 5_000;
+const NODE_MAX_RETRY_DELAY_MS = 10 * 60_000;
+const NODE_STABLE_AFTER_MS = 60_000;
+// Nós públicos fecham com 4000 quando o bot excede o limite de tentativas de conexão;
+// reconectar a cada 5s mantém o bloqueio ativo indefinidamente.
+const NODE_RATE_LIMIT_CLOSE_CODE = 4000;
+
 async function sendToPlayerTextChannel(
   client: Client,
   player: Player,
@@ -102,7 +109,7 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
       authorization: config.lavalinkPassword,
       secure: config.lavalinkSecure,
       retryAmount: 10,
-      retryDelay: 5_000,
+      retryDelay: NODE_RETRY_DELAY_MS,
     },
   ];
 
@@ -114,7 +121,7 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
       authorization: "https://seretia.link/discord",
       secure: true,
       retryAmount: 10,
-      retryDelay: 5_000,
+      retryDelay: NODE_RETRY_DELAY_MS,
     });
   }
 
@@ -147,8 +154,39 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
     },
   });
 
+  const stableTimers = new Map<string, NodeJS.Timeout>();
+
   lavalink.nodeManager.on("connect", (node) => {
     console.log(`[Lavalink] Conectado ao nó "${node.id}" (${node.options.host}:${node.options.port})`);
+    clearTimeout(stableTimers.get(node.id));
+    stableTimers.set(
+      node.id,
+      setTimeout(() => {
+        stableTimers.delete(node.id);
+        if (node.connected) {
+          node.options.retryDelay = NODE_RETRY_DELAY_MS;
+        }
+      }, NODE_STABLE_AFTER_MS),
+    );
+  });
+
+  lavalink.nodeManager.on("disconnect", (node, { code, reason }) => {
+    clearTimeout(stableTimers.get(node.id));
+    stableTimers.delete(node.id);
+
+    if (code === NODE_RATE_LIMIT_CLOSE_CODE) {
+      const current = node.options.retryDelay ?? NODE_RETRY_DELAY_MS;
+      node.options.retryDelay = Math.min(current * 2, NODE_MAX_RETRY_DELAY_MS);
+    }
+
+    const retryInSec = Math.round((node.options.retryDelay ?? NODE_RETRY_DELAY_MS) / 1000);
+    console.warn(
+      `[Lavalink] Nó "${node.id}" desconectado (code ${code ?? "?"}: ${reason ?? "sem motivo"}). Nova tentativa em ${retryInSec}s.`,
+    );
+    recordBotError({
+      type: "lavalink",
+      message: `Node "${node.id}" disconnected (code ${code ?? "?"}): ${reason ?? "no reason"}`,
+    });
   });
 
   lavalink.nodeManager.on("error", (node, error) => {
