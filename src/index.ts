@@ -123,6 +123,17 @@ async function main(): Promise<void> {
     process.exit(0);
   };
 
+  // lavalink-client lança erros em handlers assíncronos (ex.: nó sem /v4/info) que viram
+  // rejeições não tratadas; sem este handler o Node encerra o processo.
+  process.on("unhandledRejection", (reason) => {
+    console.error("[Bot] Rejeição não tratada:", reason);
+    recordBotError({
+      type: "fatal",
+      message: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : undefined,
+    });
+  });
+
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 

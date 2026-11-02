@@ -10,11 +10,11 @@ services:
       - key: DISCORD_CLIENT_ID
         value: "1547039282584100945"
       - key: LAVALINK_HOST
-        value: lavalink.jirayu.net
+        value: lavalinkv4.serenetia.com
       - key: LAVALINK_PORT
         value: "443"
       - key: LAVALINK_PASSWORD
-        value: youshallnotpass
+        value: https://seretia.link/discord
       - key: LAVALINK_SECURE
         value: "true"
       - key: LAVALINK_FALLBACK_NODES
