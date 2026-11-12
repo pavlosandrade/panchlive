@@ -3,6 +3,10 @@ services:
     image: ghcr.io/lavalink-devs/lavalink:4.2.2
     container_name: panchlive-lavalink
     restart: unless-stopped
+    # Opcional: PLUGINS_YOUTUBE_OAUTH_REFRESHTOKEN (OAuth do YouTube). Nunca versionar.
+    env_file:
+      - path: .env.lavalink
+        required: false
     environment:
       - _JAVA_OPTIONS=-Xmx1G
       - SERVER_PORT=2333

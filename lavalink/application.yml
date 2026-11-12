@@ -34,8 +34,16 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    # OAuth: necessário quando o YouTube responde "Sign in to confirm you're not a bot"
+    # ou "requires login" (comum em IPs de data center). Só funciona com o cliente TV.
+    # O refresh token NÃO fica aqui (repositório público): é passado pela variável
+    # PLUGINS_YOUTUBE_OAUTH_REFRESHTOKEN no arquivo .env.lavalink do servidor.
+    # Use uma conta Google descartável: o YouTube pode encerrar contas usadas assim.
+    oauth:
+      enabled: true
     clients:
       - MUSIC
+      - TV
       - ANDROID
       - IOS
       - ANDROID_VR

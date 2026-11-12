@@ -153,17 +153,30 @@ describe("formatProgressBar", () => {
 });
 
 describe("formatTrackErrorReason", () => {
-  const ageRestrictedError = `(yts.version: 10f3c72ba562b7b2b70ba372eb268f54b5cd1d0c) All clients failed to load the item.
+  const LOGIN_OR_BOT_REASON = "o YouTube exigiu login ou bloqueou temporariamente o servidor de áudio";
 
-Client [MWEB] failed: This video requires login.
+  // Erro real observado num IP de data center (vídeo SEM restrição de idade).
+  const loginRequiredError = `(yts.version: 2be8e542d3f6f178e048dca565892684c2e40177) All clients failed to load the item.
+
+Client [ANDROID] failed: This video requires login.
     at dev.lavalink.youtube.clients.skeleton.Client.getPlayabilityStatus(Client.java:106)
-    at dev.lavalink.youtube.clients.skeleton.NonMusicClient.loadTrackInfoFromInnertube(NonMusicClient.java:164)
+
+Client [TVHTML5_SIMPLY] failed: Sign in to confirm you’re not a bot
+    at dev.lavalink.youtube.clients.skeleton.Client.getPlayabilityStatus(Client.java:106)
 
 Client [WEB_EMBEDDED_PLAYER] failed: This video is unavailable
     at dev.lavalink.youtube.clients.skeleton.Client.getPlayabilityStatus(Client.java:66)`;
 
-  it("prioriza restrição de idade mesmo quando outro cliente diz 'unavailable'", () => {
-    assert.equal(formatTrackErrorReason(ageRestrictedError), "vídeo com restrição de idade no YouTube");
+  it("não confunde 'requires login' com restrição de idade", () => {
+    assert.equal(formatTrackErrorReason(loginRequiredError), LOGIN_OR_BOT_REASON);
+    assert.equal(formatTrackErrorReason("This video requires login."), LOGIN_OR_BOT_REASON);
+  });
+
+  it("prioriza restrição de idade mesmo quando outro cliente diz 'requires login' ou 'unavailable'", () => {
+    const ageError = `Client [WEB] failed: Sign in to confirm your age
+Client [MWEB] failed: This video requires login.
+Client [WEB_EMBEDDED_PLAYER] failed: This video is unavailable`;
+    assert.equal(formatTrackErrorReason(ageError), "vídeo com restrição de idade no YouTube");
     assert.equal(
       formatTrackErrorReason("Sign in to confirm your age"),
       "vídeo com restrição de idade no YouTube",
@@ -172,7 +185,7 @@ Client [WEB_EMBEDDED_PLAYER] failed: This video is unavailable
 
   it("mapeia cada categoria conhecida", () => {
     const cases: Array<[string, string]> = [
-      ["Sign in to confirm you're not a bot", "o YouTube bloqueou temporariamente o servidor de áudio"],
+      ["Sign in to confirm you're not a bot", LOGIN_OR_BOT_REASON],
       ["This video is private", "o vídeo é privado"],
       [
         "The uploader has not made this video available in your country",
