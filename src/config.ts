@@ -61,7 +61,7 @@ export function loadConfig(): AppConfig {
     discordGuildId,
     lavalinkHost: process.env.LAVALINK_HOST?.trim() || "localhost",
     lavalinkPort: parsePositiveInt(process.env.LAVALINK_PORT, 2333, "LAVALINK_PORT"),
-    lavalinkPassword: process.env.LAVALINK_PASSWORD?.trim() || "panchat-lavalink-secret",
+    lavalinkPassword: process.env.LAVALINK_PASSWORD?.trim() || "panchlive-lavalink-secret",
     lavalinkSecure: parseBoolean(process.env.LAVALINK_SECURE, false),
     lavalinkFallbackNodes: parseBoolean(process.env.LAVALINK_FALLBACK_NODES, false),
     httpPort: parsePositiveInt(process.env.PORT, 3000, "PORT"),

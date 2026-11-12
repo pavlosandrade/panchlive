@@ -1,5 +1,5 @@
 {
-  "name": "panchat",
+  "name": "panchlive",
   "version": "1.0.0",
   "description": "Bot privado de música para Discord usando discord.js e Lavalink v4",
   "private": true,

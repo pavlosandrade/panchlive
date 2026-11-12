@@ -1,12 +1,12 @@
 services:
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4.2.2
-    container_name: panchat-lavalink
+    container_name: panchlive-lavalink
     restart: unless-stopped
     environment:
       - _JAVA_OPTIONS=-Xmx1G
       - SERVER_PORT=2333
-      - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-panchat-lavalink-secret}
+      - LAVALINK_SERVER_PASSWORD=${LAVALINK_PASSWORD:-panchlive-lavalink-secret}
     volumes:
       - ./lavalink/application.yml:/opt/Lavalink/application.yml:ro
     ports:
@@ -14,7 +14,7 @@ services:
 
   bot:
     build: .
-    container_name: panchat-bot
+    container_name: panchlive-bot
     restart: unless-stopped
     env_file:
       - path: .env
