@@ -41,6 +41,12 @@ plugins:
     # Use uma conta Google descartável: o YouTube pode encerrar contas usadas assim.
     oauth:
       enabled: true
+    # Decifra a assinatura do player do YouTube (o cliente TV falhava com
+    # "Must find sig function from script"). Instância pública do yt-cipher,
+    # limite de 10 req/s. Se ficar instável, hospedar o yt-cipher localmente.
+    remoteCipher:
+      url: "https://cipher.kikkia.dev"
+      userAgent: "panchlive"
     clients:
       - MUSIC
       - TV
