@@ -200,12 +200,14 @@ export const GENERIC_TRACK_ERROR_REASON = "erro ao carregar o áudio";
  */
 const TRACK_ERROR_CATEGORIES: Array<{ patterns: RegExp[]; reason: string }> = [
   {
-    patterns: [/requires login/i, /age[- ]restricted/i, /confirm your age/i],
+    patterns: [/age[- ]restricted/i, /confirm your age/i, /inappropriate for some users/i],
     reason: "vídeo com restrição de idade no YouTube",
   },
   {
-    patterns: [/not a bot/i],
-    reason: "o YouTube bloqueou temporariamente o servidor de áudio",
+    // "requires login" NÃO indica restrição de idade: o YouTube também usa essa
+    // resposta quando bloqueia IPs de data center ou exige uma conta logada.
+    patterns: [/not a bot/i, /requires login/i],
+    reason: "o YouTube exigiu login ou bloqueou temporariamente o servidor de áudio",
   },
   {
     patterns: [/private/i],
