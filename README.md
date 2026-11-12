@@ -1,4 +1,4 @@
-# panchat
+# PanchLive
 
 Bot privado de música para Discord feito em **TypeScript (`discord.js` v14)** com servidor de áudio **Lavalink v4** e plugin `youtube-source`.
 
@@ -17,7 +17,7 @@ Bot privado de música para Discord feito em **TypeScript (`discord.js` v14)** c
 ## 1. Criar o Bot no Discord Developer Portal
 
 1. Acesse [discord.com/developers/applications](https://discord.com/developers/applications) e clique em **New Application**.
-2. Dê um nome (ex: `panchat`) e copie o **Application ID** (esse é o `DISCORD_CLIENT_ID`).
+2. Dê um nome (ex: `panchlive`) e copie o **Application ID** (esse é o `DISCORD_CLIENT_ID`).
 3. No menu lateral, vá em **Bot**:
    - Clique em **Reset Token** e copie o token gerado (esse é o `DISCORD_TOKEN`).
    - *(Guarde no `.env`, nunca compartilhe nem faça commit desse token).*
@@ -51,7 +51,7 @@ DISCORD_GUILD_ID=id_do_seu_servidor_aqui
 
 LAVALINK_HOST=localhost
 LAVALINK_PORT=2333
-LAVALINK_PASSWORD=panchat-lavalink-secret
+LAVALINK_PASSWORD=panchlive-lavalink-secret
 
 IDLE_TIMEOUT_MIN=5
 ```

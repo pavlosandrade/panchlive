@@ -133,7 +133,7 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
     autoSkip: true,
     client: {
       id: config.discordClientId,
-      username: "panchat",
+      username: "panchlive",
     },
     playerOptions: {
       defaultSearchPlatform: "ytmsearch",

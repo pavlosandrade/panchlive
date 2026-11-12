@@ -471,7 +471,7 @@ export function buildQueueEmbedForPlayer(player: Player): EmbedBuilder {
 function buildCommandsHelpEmbed(color: number): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(color)
-    .setTitle("Comandos e Controles — Panchat")
+    .setTitle("Comandos e Controles — PanchLive")
     .setDescription("Você pode controlar o bot pelos botões abaixo do player ou pelos comandos `/`:")
     .addFields(
       {

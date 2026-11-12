@@ -7,7 +7,7 @@ lavalink:
     - dependency: "dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177"
       snapshot: true
   server:
-    password: "panchat-lavalink-secret"
+    password: "panchlive-lavalink-secret"
     sources:
       youtube: false
       bandcamp: true
