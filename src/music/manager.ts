@@ -2,6 +2,7 @@ import type { Client, VoiceBasedChannel, VoiceState } from "discord.js";
 import { LavalinkManager, type Player, type Track } from "lavalink-client";
 import type { AppConfig } from "../config.js";
 import { recordBotError } from "../error-store.js";
+import type { StatsCollector } from "../stats/collector.js";
 import {
   buildNowPlayingControls,
   buildNowPlayingEmbed,
@@ -100,7 +101,11 @@ export function handleVoiceStateUpdate(
   }
 }
 
-export function createMusicManager(client: Client, config: AppConfig): LavalinkManager {
+export function createMusicManager(
+  client: Client,
+  config: AppConfig,
+  stats?: StatsCollector,
+): LavalinkManager {
   const nodes = [
     {
       id: "main-node",
@@ -146,8 +151,18 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
       },
       requesterTransformer: (requester: unknown): RequesterInfo => {
         if (requester && typeof requester === "object" && "id" in requester) {
-          const r = requester as { id: string; username?: string };
-          return { id: r.id, username: r.username ?? "Usuário" };
+          const r = requester as {
+            id: string;
+            username?: string;
+            displayName?: string;
+            avatarUrl?: string | null;
+          };
+          return {
+            id: r.id,
+            username: r.username ?? "Usuário",
+            displayName: r.displayName,
+            avatarUrl: r.avatarUrl ?? null,
+          };
         }
         return { id: String(requester ?? ""), username: "Usuário" };
       },
@@ -202,6 +217,8 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
     if (!track) {
       return;
     }
+    stats?.recordTrackStart(player.guildId, track, { repeatMode: player.repeatMode });
+
     if (consumeInitialPlayTrack(player, track.info.identifier)) {
       await refreshNowPlayingMessage(player, client);
       startNowPlayingProgressTimer(player, client);
@@ -225,8 +242,21 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
     startNowPlayingProgressTimer(player, client);
   });
 
+  lavalink.on("trackEnd", (player, _track, payload) => {
+    stats?.recordTrackEnd(player.guildId, payload.reason ?? "finished");
+  });
+
+  lavalink.on("playerPaused", (player) => {
+    stats?.recordTrackPause(player.guildId);
+  });
+
+  lavalink.on("playerResumed", (player) => {
+    stats?.recordTrackResume(player.guildId);
+  });
+
   lavalink.on("trackError", async (player, track, payload) => {
     stopNowPlayingProgressTimer(player);
+    stats?.recordTrackEnd(player.guildId, "loadFailed");
     const title = track?.info?.title ?? "faixa desconhecida";
     const reason = payload.exception?.message ?? "erro desconhecido ao reproduzir";
     console.error(`[Music] Erro na faixa "${title}":`, reason);
@@ -243,6 +273,7 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
 
   lavalink.on("trackStuck", async (player, track) => {
     stopNowPlayingProgressTimer(player);
+    stats?.recordTrackEnd(player.guildId, "stuck");
     const title = track?.info?.title ?? "faixa desconhecida";
     console.warn(`[Music] Faixa travou: "${title}"`);
     await sendToPlayerTextChannel(
@@ -279,6 +310,7 @@ export function createMusicManager(client: Client, config: AppConfig): LavalinkM
   lavalink.on("playerDestroy", async (player) => {
     stopNowPlayingProgressTimer(player);
     clearEmptyChannelTimer(player);
+    stats?.clearGuildState(player.guildId, "stopped");
     await disablePreviousNowPlayingMessage(player, client);
   });
 

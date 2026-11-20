@@ -98,7 +98,16 @@ export const playCommand: SlashCommand = {
         await player.connect();
       }
 
-      const requester = { id: interaction.user.id, username: interaction.user.username };
+      const memberDisplayName =
+        interaction.member && "displayName" in interaction.member && typeof interaction.member.displayName === "string"
+          ? interaction.member.displayName
+          : interaction.user.displayName;
+      const requester = {
+        id: interaction.user.id,
+        username: interaction.user.username,
+        displayName: memberDisplayName,
+        avatarUrl: interaction.user.displayAvatarURL({ size: 128 }),
+      };
       const primarySource = platformOption === "spotify" ? "spsearch" : "ytmsearch";
 
       let result: Awaited<ReturnType<typeof player.search>> | undefined;

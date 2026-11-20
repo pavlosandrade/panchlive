@@ -55,6 +55,8 @@ export function consumeInitialPlayTrack(player: Player, trackId: string | undefi
 export interface RequesterInfo {
   id: string;
   username: string;
+  displayName?: string;
+  avatarUrl?: string | null;
 }
 
 export function getRequesterId(track: Track | UnresolvedTrack | null | undefined): string | undefined {

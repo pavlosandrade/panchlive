@@ -26,6 +26,17 @@ services:
     environment:
       - LAVALINK_HOST=lavalink
       - LAVALINK_PORT=2333
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - TRUST_PROXY=${TRUST_PROXY:-true}
+      - DASHBOARD_REQUIRE_HTTPS=${DASHBOARD_REQUIRE_HTTPS:-true}
+    volumes:
+      - bot-data:/app/data
+    ports:
+      - "127.0.0.1:${DASHBOARD_HOST_PORT:-3000}:3000"
     depends_on:
       - lavalink
+
+volumes:
+  bot-data:
 

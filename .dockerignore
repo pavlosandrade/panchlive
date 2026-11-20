@@ -1,6 +1,10 @@
 node_modules
 dist
+data
 .git
 .env
 .env.*
 *.log
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

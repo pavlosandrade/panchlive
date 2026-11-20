@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PanchLive Dashboard</title>
+    <meta
+      name="description"
+      content="Painel privado de estatísticas, rankings, histórico e reprodução ao vivo do bot musical PanchLive."
+    />
+    <meta name="application-name" content="PanchLive Dashboard" />
+    <meta name="robots" content="noindex, nofollow, noarchive, noai, noimageai" />
+    <meta name="googlebot" content="noindex, nofollow, noarchive" />
+    <meta name="theme-color" content="#101014" />
+    <meta name="color-scheme" content="light" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Open Graph / Preview de compartilhamento (Discord, WhatsApp, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:site_name" content="PanchLive" />
+    <meta property="og:title" content="PanchLive Dashboard" />
+    <meta
+      property="og:description"
+      content="Estatísticas, rankings e reprodução ao vivo do bot musical PanchLive."
+    />
+    <meta property="og:image" content="/assets/icon-512.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="Logo do PanchLive" />
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="PanchLive Dashboard" />
+    <meta
+      name="twitter:description"
+      content="Estatísticas, rankings e reprodução ao vivo do bot musical PanchLive."
+    />
+    <meta name="twitter:image" content="/assets/icon-512.png" />
+    <meta name="twitter:image:alt" content="Logo do PanchLive" />
+
+    <!-- Favicons e Web App Manifest -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <!-- Tela de carregamento -->
+    <main id="loading-view" class="center-shell">
+      <div class="auth-stack">
+        <div class="auth-card auth-card-compact center-text">
+          <div class="brand-mark brand-logo auth-logo">
+            <img src="/assets/logo.jpg" alt="PanchLive" />
+          </div>
+          <h1 class="auth-title">Carregando...</h1>
+          <p class="auth-desc">Verificando conexão segura e sessão.</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bloqueio HTTPS fail-closed -->
+    <main id="https-blocked-view" class="center-shell hidden">
+      <div class="auth-stack">
+        <section class="auth-card auth-card-compact center-text">
+          <div class="badge badge-danger">Conexão insegura bloqueada</div>
+          <h1 class="auth-title">HTTPS obrigatório</h1>
+          <p class="auth-desc">
+            O login e o acesso à dashboard foram bloqueados porque esta requisição não chegou via
+            <strong>HTTPS</strong>.
+          </p>
+          <p class="auth-desc">
+            Acesse pelo domínio HTTPS configurado no proxy reverso da VPS (Nginx, Caddy ou Traefik)
+            encaminhando o cabeçalho <code>X-Forwarded-Proto: https</code>.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <!-- Tela de Setup Inicial -->
+    <main id="setup-view" class="center-shell hidden">
+      <div class="auth-stack">
+        <section class="auth-card auth-card-wide">
+          <div class="auth-header">
+            <div class="brand-mark brand-logo auth-logo">
+              <img src="/assets/logo.jpg" alt="PanchLive" />
+            </div>
+            <h1 class="auth-title" data-dashboard-title>PanchLive Dashboard</h1>
+            <p class="auth-desc">Configure a primeira conta administradora do painel.</p>
+          </div>
+
+          <div id="setup-disabled-box" class="alert alert-warning hidden">
+            <p><strong>Setup pela web bloqueado em produção.</strong></p>
+            <p>
+              Configure <code>DASHBOARD_ADMIN_USERNAME</code> e
+              <code>DASHBOARD_ADMIN_PASSWORD</code> no arquivo <code>.env</code> da VPS e reinicie
+              o container, ou defina <code>DASHBOARD_SETUP_TOKEN</code> para liberar esta tela via
+              HTTPS.
+            </p>
+          </div>
+
+          <form id="setup-form" class="form-stack hidden" autocomplete="off">
+            <div id="setup-token-group" class="field hidden">
+              <label for="setup-token">Token de configuração inicial</label>
+              <input
+                id="setup-token"
+                name="setupToken"
+                type="password"
+                placeholder="Cole o token de configuração"
+              />
+            </div>
+
+            <div class="auth-field-grid">
+              <div class="field">
+                <label for="setup-display-name">Nome de exibição</label>
+                <input
+                  id="setup-display-name"
+                  name="displayName"
+                  type="text"
+                  required
+                  maxlength="64"
+                  placeholder="Como quer ser chamado"
+                />
+              </div>
+              <div class="field">
+                <label for="setup-username">Usuário</label>
+                <input
+                  id="setup-username"
+                  name="username"
+                  type="text"
+                  required
+                  minlength="3"
+                  maxlength="32"
+                  placeholder="Escolha um usuário"
+                />
+              </div>
+            </div>
+
+            <div class="auth-field-grid">
+              <div class="field">
+                <label for="setup-password">Senha</label>
+                <div class="password-wrap">
+                  <input
+                    id="setup-password"
+                    name="password"
+                    type="password"
+                    required
+                    minlength="8"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    placeholder="Crie uma senha"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    data-password-toggle="setup-password"
+                    aria-label="Mostrar ou ocultar senha"
+                  >
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="setup-password-confirm">Confirmar senha</label>
+                <input
+                  id="setup-password-confirm"
+                  name="passwordConfirm"
+                  type="password"
+                  required
+                  minlength="8"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  placeholder="Confirme sua senha"
+                />
+              </div>
+            </div>
+
+            <div class="password-rules" data-password-rules-for="setup-password"></div>
+
+            <p id="setup-error" class="form-error hidden"></p>
+            <button type="submit" class="btn btn-primary btn-full auth-submit-btn">
+              Criar conta administradora
+            </button>
+          </form>
+        </section>
+
+        <div class="auth-footnote">PanchLive • Acesso protegido</div>
+      </div>
+    </main>
+
+    <!-- Tela de Login / Registro por Convite -->
+    <main id="auth-view" class="center-shell hidden">
+      <div class="auth-stack">
+        <section id="auth-card" class="auth-card">
+          <div class="auth-header">
+            <div class="brand-mark brand-logo auth-logo">
+              <img src="/assets/logo.jpg" alt="PanchLive" />
+            </div>
+            <h1 class="auth-title" data-dashboard-title>PanchLive Dashboard</h1>
+            <p id="auth-subheading" class="auth-desc">
+              Entre com sua conta para acessar as estatísticas.
+            </p>
+          </div>
+
+          <div class="segmented" role="tablist">
+            <button type="button" id="tab-login-btn" class="segmented-btn active" role="tab">
+              Entrar
+            </button>
+            <button type="button" id="tab-register-btn" class="segmented-btn" role="tab">
+              Criar conta
+            </button>
+          </div>
+
+          <form id="login-form" class="form-stack">
+            <div class="field">
+              <label for="login-username">Usuário</label>
+              <input
+                id="login-username"
+                name="username"
+                type="text"
+                required
+                autocomplete="username"
+                placeholder="Digite seu usuário"
+              />
+            </div>
+            <div class="field">
+              <label for="login-password">Senha</label>
+              <div class="password-wrap">
+                <input
+                  id="login-password"
+                  name="password"
+                  type="password"
+                  required
+                  autocomplete="current-password"
+                  placeholder="Digite sua senha"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  data-password-toggle="login-password"
+                  aria-label="Mostrar ou ocultar senha"
+                >
+                  <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <p id="login-error" class="form-error hidden"></p>
+            <button type="submit" class="btn btn-primary btn-full auth-submit-btn">Entrar</button>
+          </form>
+
+          <form id="register-form" class="form-stack hidden" autocomplete="off">
+            <div class="field">
+              <label for="reg-invite">Código de convite</label>
+              <input
+                id="reg-invite"
+                name="inviteCode"
+                type="text"
+                required
+                placeholder="Cole o código recebido"
+              />
+            </div>
+
+            <div class="auth-field-grid">
+              <div class="field">
+                <label for="reg-display-name">Nome de exibição</label>
+                <input
+                  id="reg-display-name"
+                  name="displayName"
+                  type="text"
+                  required
+                  maxlength="64"
+                  placeholder="Como quer ser chamado"
+                />
+              </div>
+              <div class="field">
+                <label for="reg-username">Usuário</label>
+                <input
+                  id="reg-username"
+                  name="username"
+                  type="text"
+                  required
+                  minlength="3"
+                  maxlength="32"
+                  placeholder="Escolha um usuário"
+                />
+              </div>
+            </div>
+
+            <div class="auth-field-grid">
+              <div class="field">
+                <label for="reg-password">Senha</label>
+                <div class="password-wrap">
+                  <input
+                    id="reg-password"
+                    name="password"
+                    type="password"
+                    required
+                    minlength="8"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    placeholder="Crie uma senha"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    data-password-toggle="reg-password"
+                    aria-label="Mostrar ou ocultar senha"
+                  >
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="reg-password-confirm">Confirmar senha</label>
+                <input
+                  id="reg-password-confirm"
+                  name="passwordConfirm"
+                  type="password"
+                  required
+                  minlength="8"
+                  maxlength="128"
+                  autocomplete="new-password"
+                  placeholder="Confirme sua senha"
+                />
+              </div>
+            </div>
+
+            <div class="password-rules" data-password-rules-for="reg-password"></div>
+
+            <p id="register-error" class="form-error hidden"></p>
+            <button type="submit" class="btn btn-primary btn-full auth-submit-btn">
+              Criar conta e entrar
+            </button>
+          </form>
+        </section>
+
+        <div class="auth-footnote">PanchLive • Acesso protegido</div>
+      </div>
+    </main>
+
+    <!-- Aplicação Principal Autenticada -->
+    <div id="app-view" class="app-shell hidden">
+      <button
+        type="button"
+        id="sidebar-toggle-btn"
+        class="sidebar-toggle-btn"
+        aria-label="Recolher menu lateral"
+        aria-expanded="true"
+        title="Recolher menu"
+      >
+        <svg
+          class="sidebar-toggle-icon"
+          viewBox="0 0 24 24"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+
+      <header class="topbar">
+        <div class="topbar-left">
+          <div id="sidebar-avatar" class="brand-mark brand-logo brand-mark-sm" title="PanchLive">
+            <img src="/assets/logo.jpg" alt="PanchLive" />
+          </div>
+
+          <div class="sidebar-identity">
+            <div class="sidebar-user-row">
+              <span id="current-user-name" class="topbar-title"></span>
+              <span id="current-user-role" class="badge"></span>
+            </div>
+          </div>
+        </div>
+
+        <nav class="topbar-nav" aria-label="Navegação principal">
+          <button type="button" id="nav-dashboard-btn" class="nav-btn active" title="Dashboard">
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="7" height="9" rx="2"></rect>
+              <rect x="14" y="3" width="7" height="5" rx="2"></rect>
+              <rect x="14" y="12" width="7" height="9" rx="2"></rect>
+              <rect x="3" y="16" width="7" height="5" rx="2"></rect>
+            </svg>
+            <span class="nav-label">Dashboard</span>
+          </button>
+
+          <button type="button" id="nav-account-btn" class="nav-btn" title="Minha Conta">
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span class="nav-label">Minha Conta</span>
+          </button>
+
+          <button
+            type="button"
+            id="nav-admin-btn"
+            class="nav-btn admin-only hidden"
+            title="Gerenciamento"
+          >
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              ></path>
+            </svg>
+            <span class="nav-label">Gerenciamento</span>
+          </button>
+        </nav>
+
+        <div class="topbar-footer">
+          <button type="button" id="logout-btn" class="nav-btn nav-btn-logout" title="Sair">
+            <svg
+              class="nav-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span class="nav-label">Sair</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Página Dashboard -->
+      <main id="page-dashboard" class="container">
+        <header class="page-header dashboard-header">
+          <div>
+            <h1 class="page-title" data-dashboard-title>PanchLive Dashboard</h1>
+            <p class="page-subtitle">Visão geral de reproduções, ouvintes e atividade do bot.</p>
+          </div>
+
+          <div class="toolbar-group">
+            <label for="guild-select" class="sr-only">Servidor</label>
+            <select id="guild-select" class="select-input">
+              <option value="all">Todos os servidores</option>
+            </select>
+
+            <div class="range-group" role="group" aria-label="Período">
+              <button type="button" class="range-btn" data-range="7d">7d</button>
+              <button type="button" class="range-btn active" data-range="30d">30d</button>
+              <button type="button" class="range-btn" data-range="90d">90d</button>
+              <button type="button" class="range-btn" data-range="all">Tudo</button>
+            </div>
+
+            <button
+              type="button"
+              id="refresh-dashboard-btn"
+              class="btn btn-secondary btn-sm"
+              title="Atualizar dados"
+            >
+              Atualizar
+            </button>
+          </div>
+        </header>
+
+        <!-- Nível 1: KPIs em destaque -->
+        <section class="kpi-grid">
+          <article class="kpi-card">
+            <div class="kpi-label">Músicas tocadas</div>
+            <div id="kpi-total-plays" class="kpi-value">0</div>
+            <div id="kpi-completion-rate" class="kpi-sub">0% concluídas</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Tempo total ouvido</div>
+            <div id="kpi-total-time" class="kpi-value">0m</div>
+            <div id="kpi-unique-tracks" class="kpi-sub">0 músicas únicas</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Usuários ativos</div>
+            <div id="kpi-unique-users" class="kpi-value">0</div>
+            <div class="kpi-sub">No período selecionado</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Comandos e botões</div>
+            <div id="kpi-total-commands" class="kpi-value">0</div>
+            <div class="kpi-sub">Interações registradas</div>
+          </article>
+        </section>
+
+        <!-- Nível 2: Status Ao Vivo (compacto quando ocioso, expandido quando tocando) -->
+        <section class="panel live-idle" id="live-section">
+          <div class="panel-header live-header">
+            <div class="panel-title-row">
+              <span class="live-dot" id="live-indicator"></span>
+              <h2>Tocando Agora</h2>
+              <span id="live-idle-summary" class="live-idle-summary">
+                Nenhuma música tocando no momento
+              </span>
+            </div>
+            <div id="lavalink-nodes-badges" class="inline-badges"></div>
+          </div>
+          <div id="live-content" class="live-grid hidden"></div>
+        </section>
+
+        <!-- Nível 3: Rankings -->
+        <section class="dash-section">
+          <div class="section-kicker-row">
+            <span class="section-kicker">Rankings</span>
+            <span id="ranking-rules-hint" class="muted small-text"></span>
+          </div>
+          <div class="grid-rankings">
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Músicas mais tocadas</h2>
+                <span class="muted small-text">Top 20</span>
+              </div>
+              <div id="top-tracks-list" class="rank-list"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Quem mais usou o bot</h2>
+                <span class="muted small-text">Pedidos, tempo e comandos</span>
+              </div>
+              <div id="top-users-list" class="rank-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Nível 4: Atividade e Distribuição -->
+        <section class="dash-section">
+          <div class="section-kicker-row">
+            <span class="section-kicker">Atividade e distribuição</span>
+          </div>
+          <div class="grid-chart-wide">
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Reproduções por dia</h2>
+                <span id="daily-chart-meta" class="muted small-text"></span>
+              </div>
+              <div id="daily-chart" class="chart-box"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <h2>YouTube vs. Spotify</h2>
+              </div>
+              <div id="platforms-box"></div>
+            </article>
+          </div>
+
+          <div class="grid-chart-wide">
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Horários de pico</h2>
+                <span class="muted small-text">Fuso local (00h–23h)</span>
+              </div>
+              <div id="hourly-chart" class="chart-box"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-header">
+                <h2>Comandos e controles</h2>
+              </div>
+              <div id="commands-box"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Nível 5: Histórico -->
+        <section class="dash-section">
+          <div class="section-kicker-row">
+            <span class="section-kicker">Histórico</span>
+            <span class="muted small-text">Últimas 30 reproduções (inclui skips e loops)</span>
+          </div>
+          <article class="panel">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Música</th>
+                    <th>Pedido por</th>
+                    <th>Plataforma</th>
+                    <th>Ouvido</th>
+                    <th>Status</th>
+                    <th>Quando</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-plays-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <!-- Página Minha Conta -->
+      <main id="page-account" class="container hidden">
+        <div class="page-narrow">
+          <header class="page-header">
+            <div>
+              <h1 class="page-title">Minha Conta</h1>
+              <p class="page-subtitle">Gerencie sua senha e as sessões ativas da sua conta.</p>
+            </div>
+          </header>
+
+          <div class="account-layout">
+            <div class="account-side">
+              <section class="account-profile-card">
+                <div id="account-page-avatar" class="brand-mark account-hero-avatar">P</div>
+                <div class="account-profile-meta">
+                  <h2 id="account-page-name" class="account-profile-name"></h2>
+                  <div id="my-account-username" class="account-profile-handle"></div>
+                  <span id="account-page-role" class="badge account-profile-badge"></span>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <h2>Sessões ativas</h2>
+                </div>
+                <div class="security-stack">
+                  <p class="muted small-text">
+                    Desconecte imediatamente este navegador e todos os outros dispositivos onde sua
+                    conta estiver logada.
+                  </p>
+                  <button type="button" id="logout-all-btn" class="btn btn-danger-outline btn-full">
+                    Encerrar todas as sessões
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Alterar senha</h2>
+              </div>
+              <p class="muted small-text section-intro">
+                Ao atualizar sua senha, todos os outros dispositivos conectados são desconectados
+                automaticamente.
+              </p>
+              <form id="change-password-form" class="form-stack">
+                <div class="field">
+                  <label for="cp-current">Senha atual</label>
+                  <input
+                    id="cp-current"
+                    name="currentPassword"
+                    type="password"
+                    required
+                    autocomplete="current-password"
+                    placeholder="Digite sua senha atual"
+                  />
+                </div>
+                <div class="field">
+                  <label for="cp-new">Nova senha</label>
+                  <input
+                    id="cp-new"
+                    name="newPassword"
+                    type="password"
+                    required
+                    minlength="8"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    placeholder="Crie uma nova senha"
+                  />
+                </div>
+                <div class="password-rules" data-password-rules-for="cp-new"></div>
+                <div class="field">
+                  <label for="cp-confirm">Confirmar nova senha</label>
+                  <input
+                    id="cp-confirm"
+                    name="confirmPassword"
+                    type="password"
+                    required
+                    minlength="8"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    placeholder="Confirme a nova senha"
+                  />
+                </div>
+                <div class="actions-row">
+                  <button type="submit" class="btn btn-primary">Salvar nova senha</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <!-- Página Gerenciamento (Admin) -->
+      <main id="page-admin" class="container hidden">
+        <header class="page-header">
+          <div>
+            <h1 class="page-title">Gerenciamento</h1>
+            <p class="page-subtitle">
+              Administre contas de acesso, convites descartáveis e preferências da dashboard.
+            </p>
+          </div>
+
+          <div class="subnav-tabs" role="tablist" aria-label="Seções de gerenciamento">
+            <button
+              type="button"
+              id="admin-tab-btn-accounts"
+              class="subnav-btn active"
+              data-admin-tab="accounts"
+              role="tab"
+              aria-selected="true"
+            >
+              Contas
+              <span id="admin-accounts-count" class="subnav-count">0</span>
+            </button>
+            <button
+              type="button"
+              id="admin-tab-btn-invites"
+              class="subnav-btn"
+              data-admin-tab="invites"
+              role="tab"
+              aria-selected="false"
+            >
+              Convites
+              <span id="admin-invites-count" class="subnav-count">0</span>
+            </button>
+            <button
+              type="button"
+              id="admin-tab-btn-preferences"
+              class="subnav-btn"
+              data-admin-tab="preferences"
+              role="tab"
+              aria-selected="false"
+            >
+              Preferências
+            </button>
+          </div>
+        </header>
+
+        <!-- Aba Contas -->
+        <div id="admin-tab-accounts" class="tab-panel">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Contas cadastradas</h2>
+                <p class="muted small-text panel-desc">
+                  Altere papéis, desative acessos ou redefina senhas de usuários.
+                </p>
+              </div>
+              <button type="button" id="open-create-account-btn" class="btn btn-primary btn-sm">
+                + Nova conta
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Usuário</th>
+                    <th>Papel</th>
+                    <th>Status</th>
+                    <th>Último acesso</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="accounts-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- Aba Convites -->
+        <div id="admin-tab-invites" class="tab-panel hidden">
+          <div id="new-invite-banner" class="invite-box hidden">
+            <div>
+              <div class="small-text muted">Código gerado (exibido apenas uma vez):</div>
+              <code id="new-invite-code" class="invite-code-display"></code>
+            </div>
+            <div class="actions-row">
+              <button type="button" id="copy-invite-code-btn" class="btn btn-secondary btn-sm">
+                Copiar código
+              </button>
+              <button type="button" id="copy-invite-link-btn" class="btn btn-primary btn-sm">
+                Copiar link
+              </button>
+              <button type="button" id="dismiss-invite-banner-btn" class="btn btn-secondary btn-sm">
+                Fechar
+              </button>
+            </div>
+          </div>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Convites de cadastro</h2>
+                <p class="muted small-text panel-desc">
+                  Códigos de uso único com validade para convidar novos usuários.
+                </p>
+              </div>
+              <button type="button" id="open-create-invite-btn" class="btn btn-primary btn-sm">
+                + Gerar convite
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Prefixo</th>
+                    <th>Papel</th>
+                    <th>Observação</th>
+                    <th>Status</th>
+                    <th>Expira em</th>
+                    <th>Usado por</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="invites-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
+        <!-- Aba Preferências -->
+        <div id="admin-tab-preferences" class="tab-panel hidden">
+          <section class="panel settings-narrow">
+            <form id="settings-form" class="form-stack">
+              <div class="settings-group">
+                <div class="settings-group-head">
+                  <h2>Identidade do painel</h2>
+                  <p class="muted small-text">Nome exibido no cabeçalho e na aba do navegador.</p>
+                </div>
+                <div class="field">
+                  <label for="set-title">Título do painel</label>
+                  <input
+                    id="set-title"
+                    name="dashboardTitle"
+                    type="text"
+                    required
+                    maxlength="60"
+                    placeholder="Nome exibido no painel"
+                  />
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <div class="settings-group-head">
+                  <h2>Regras de ranking e sessão</h2>
+                  <p class="muted small-text">
+                    Define o que conta nas métricas principais e por quanto tempo o login permanece
+                    ativo.
+                  </p>
+                </div>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="set-min-seconds">Mínimo para contar no ranking (seg)</label>
+                    <input
+                      id="set-min-seconds"
+                      name="minPlaySeconds"
+                      type="number"
+                      min="0"
+                      max="600"
+                      required
+                      placeholder="15"
+                    />
+                    <span class="field-hint">Faixas puladas antes desse tempo não entram no Top.</span>
+                  </div>
+                  <div class="field">
+                    <label for="set-session-days">Validade da sessão (dias)</label>
+                    <input
+                      id="set-session-days"
+                      name="sessionTtlDays"
+                      type="number"
+                      min="1"
+                      max="90"
+                      required
+                      placeholder="7"
+                    />
+                    <span class="field-hint">Aplicada aos próximos logins realizados.</span>
+                  </div>
+                </div>
+                <label class="checkbox-row">
+                  <input id="set-ignore-loop" name="ignoreLoopInRankings" type="checkbox" />
+                  <span>Ignorar repetições automáticas de loop de faixa nos rankings</span>
+                </label>
+              </div>
+
+              <div class="actions-row">
+                <button type="submit" class="btn btn-primary">Salvar preferências</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <!-- Modal: Criar Nova Conta (Admin) -->
+    <div id="create-account-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-card modal-card-wide">
+        <div class="panel-header">
+          <h3>Nova conta</h3>
+          <button type="button" id="create-account-modal-close" class="btn btn-ghost btn-sm">
+            Fechar
+          </button>
+        </div>
+        <p class="muted small-text section-intro">
+          A conta criada já pode fazer login imediatamente com a senha inicial definida abaixo.
+        </p>
+        <form id="create-account-form" class="form-stack">
+          <div class="form-grid">
+            <div class="field">
+              <label for="acc-display">Nome de exibição</label>
+              <input
+                id="acc-display"
+                name="displayName"
+                type="text"
+                required
+                maxlength="64"
+                placeholder="Nome do usuário"
+              />
+            </div>
+            <div class="field">
+              <label for="acc-username">Usuário</label>
+              <input
+                id="acc-username"
+                name="username"
+                type="text"
+                required
+                minlength="3"
+                maxlength="32"
+                placeholder="Login de acesso"
+              />
+            </div>
+            <div class="field">
+              <label for="acc-password">Senha inicial</label>
+              <input
+                id="acc-password"
+                name="password"
+                type="password"
+                required
+                minlength="8"
+                maxlength="128"
+                autocomplete="new-password"
+                placeholder="Defina uma senha inicial"
+              />
+            </div>
+            <div class="field">
+              <label for="acc-role">Papel de acesso</label>
+              <select id="acc-role" name="role" class="select-input">
+                <option value="viewer">Viewer (somente leitura)</option>
+                <option value="admin">Admin (gestão completa)</option>
+              </select>
+            </div>
+          </div>
+          <div class="password-rules" data-password-rules-for="acc-password"></div>
+          <div class="actions-row modal-actions">
+            <button type="submit" class="btn btn-primary">Criar conta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Gerar Convite (Admin) -->
+    <div id="create-invite-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-card modal-card-wide">
+        <div class="panel-header">
+          <h3>Gerar convite de cadastro</h3>
+          <button type="button" id="create-invite-modal-close" class="btn btn-ghost btn-sm">
+            Fechar
+          </button>
+        </div>
+        <p class="muted small-text section-intro">
+          O código gerado é de uso único e será exibido no topo da lista para você copiar.
+        </p>
+        <form id="create-invite-form" class="form-stack">
+          <div class="form-grid">
+            <div class="field">
+              <label for="invite-role">Papel</label>
+              <select id="invite-role" name="role" class="select-input">
+                <option value="viewer">Viewer (somente leitura)</option>
+                <option value="admin">Admin (gestão completa)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="invite-hours">Validade (horas)</label>
+              <input
+                id="invite-hours"
+                name="expiresInHours"
+                type="number"
+                min="1"
+                max="720"
+                value="48"
+                required
+                placeholder="48"
+              />
+            </div>
+          </div>
+          <div class="field">
+            <label for="invite-note">Observação (opcional)</label>
+            <input
+              id="invite-note"
+              name="note"
+              type="text"
+              maxlength="120"
+              placeholder="Para quem é este convite?"
+            />
+          </div>
+          <div class="actions-row modal-actions">
+            <button type="submit" class="btn btn-primary">Gerar convite</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal de Reset de Senha (Admin) -->
+    <div id="reset-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="panel-header">
+          <h3 id="reset-modal-title">Resetar senha</h3>
+          <button type="button" id="reset-modal-close" class="btn btn-ghost btn-sm">Fechar</button>
+        </div>
+        <p class="muted small-text section-intro">
+          Ao redefinir a senha, todas as sessões ativas desta conta serão encerradas imediatamente.
+        </p>
+        <form id="reset-password-form" class="form-stack">
+          <input type="hidden" id="reset-target-id" />
+          <div class="field">
+            <label for="reset-new-password">Nova senha</label>
+            <input
+              id="reset-new-password"
+              type="password"
+              required
+              minlength="8"
+              maxlength="128"
+              autocomplete="new-password"
+              placeholder="Digite a nova senha"
+            />
+          </div>
+          <div class="password-rules" data-password-rules-for="reset-new-password"></div>
+          <div class="actions-row modal-actions">
+            <button type="submit" class="btn btn-primary">Salvar nova senha</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

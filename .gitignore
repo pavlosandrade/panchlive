@@ -433,4 +433,8 @@ dist/
 .env
 .env.*
 lavalink/plugins/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 

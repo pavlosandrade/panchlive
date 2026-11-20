@@ -37,6 +37,26 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+function parseOptionalPublicUrl(value: string | undefined): string | undefined {
+  if (!value || !value.trim()) {
+    return undefined;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new Error(
+      "Variável de ambiente inválida: DASHBOARD_PUBLIC_URL deve ser uma URL HTTP/HTTPS válida.",
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(
+      "Variável de ambiente inválida: DASHBOARD_PUBLIC_URL deve usar protocolo http:// ou https://.",
+    );
+  }
+  return parsed.origin;
+}
+
 export interface AppConfig {
   discordToken: string;
   discordClientId: string;
@@ -49,11 +69,23 @@ export interface AppConfig {
   httpPort: number;
   idleTimeoutMin: number;
   idleTimeoutMs: number;
+  isProduction: boolean;
+  dataDir: string;
+  trustProxy: boolean;
+  dashboardRequireHttps: boolean;
+  dashboardPublicUrl?: string;
+  dashboardAdminUsername?: string;
+  dashboardAdminPassword?: string;
+  dashboardSetupToken?: string;
 }
 
 export function loadConfig(): AppConfig {
   const idleTimeoutMin = parsePositiveInt(process.env.IDLE_TIMEOUT_MIN, 5, "IDLE_TIMEOUT_MIN");
   const discordGuildId = process.env.DISCORD_GUILD_ID?.trim() || undefined;
+  const isProduction = process.env.NODE_ENV === "production";
+  const rawAdminPassword = process.env.DASHBOARD_ADMIN_PASSWORD;
+  const dashboardAdminPassword =
+    rawAdminPassword && rawAdminPassword.trim().length > 0 ? rawAdminPassword : undefined;
 
   return {
     discordToken: requireEnv("DISCORD_TOKEN"),
@@ -67,5 +99,13 @@ export function loadConfig(): AppConfig {
     httpPort: parsePositiveInt(process.env.PORT, 3000, "PORT"),
     idleTimeoutMin,
     idleTimeoutMs: idleTimeoutMin * 60 * 1000,
+    isProduction,
+    dataDir: process.env.DATA_DIR?.trim() || "./data",
+    trustProxy: parseBoolean(process.env.TRUST_PROXY, false),
+    dashboardRequireHttps: parseBoolean(process.env.DASHBOARD_REQUIRE_HTTPS, isProduction),
+    dashboardPublicUrl: parseOptionalPublicUrl(process.env.DASHBOARD_PUBLIC_URL),
+    dashboardAdminUsername: process.env.DASHBOARD_ADMIN_USERNAME?.trim() || undefined,
+    dashboardAdminPassword,
+    dashboardSetupToken: process.env.DASHBOARD_SETUP_TOKEN?.trim() || undefined,
   };
 }
