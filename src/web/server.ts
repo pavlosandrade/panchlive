@@ -28,6 +28,10 @@ import {
 } from "../auth/service.js";
 import { getLastError } from "../error-store.js";
 import {
+  PlayerControlError,
+  type PlayerControlService,
+} from "../music/web-controller.js";
+import {
   getActivityStats,
   getDashboardSettings,
   getOverviewStats,
@@ -72,6 +76,7 @@ export interface LivePlayerSnapshot {
   voiceChannelName: string | null;
   playing: boolean;
   paused: boolean;
+  volume: number;
   repeatMode: string;
   positionMs: number;
   queueLength: number;
@@ -105,6 +110,7 @@ export interface WebServerOptions {
   publicDir?: string;
   getBotTag: () => string;
   getLiveSnapshot: (guildId?: string) => LiveSnapshot;
+  playerControl?: PlayerControlService;
 }
 
 const DEFAULT_PUBLIC_DIR = path.resolve(
@@ -168,6 +174,7 @@ export function createWebServer(options: WebServerOptions): http.Server {
   const publicOrigin = normalizePublicOrigin(options.publicUrl);
   const authRateLimiter = new SlidingWindowRateLimiter(15, 15 * 60 * 1000);
   const setupRateLimiter = new SlidingWindowRateLimiter(10, 15 * 60 * 1000);
+  const playerControlRateLimiter = new SlidingWindowRateLimiter(60, 60 * 1000);
 
   // Limpeza periódica de sessões expiradas (a cada 1 hora)
   const cleanupTimer = setInterval(() => {
@@ -189,7 +196,8 @@ export function createWebServer(options: WebServerOptions): http.Server {
       if (
         err instanceof HttpRequestError ||
         err instanceof AuthError ||
-        err instanceof SettingsValidationError
+        err instanceof SettingsValidationError ||
+        err instanceof PlayerControlError
       ) {
         sendJson(res, err.statusCode, { error: err.message });
         return;
@@ -527,6 +535,131 @@ export function createWebServer(options: WebServerOptions): http.Server {
         const guildId = url.searchParams.get("guildId") || undefined;
         const limit = parseLimit(url.searchParams.get("limit"), 30);
         sendJson(res, 200, { plays: getRecentPlays(options.db, { guildId }, limit) });
+        return;
+      }
+
+      // Controles remotos do player por servidor (somente admin)
+      const playerControlMatch = /^\/api\/player\/([^/]+)(\/.*)$/.exec(pathname);
+      if (playerControlMatch) {
+        requireAdmin(session);
+        if (!options.playerControl) {
+          throw new HttpRequestError(503, "Controle remoto do player indisponível.");
+        }
+
+        const controlLimit = playerControlRateLimiter.check(`player:${session.account.id}`);
+        if (!controlLimit.allowed) {
+          sendJson(
+            res,
+            429,
+            { error: "Muitos comandos em sequência. Aguarde alguns segundos." },
+            { "Retry-After": String(controlLimit.retryAfterSeconds) },
+          );
+          return;
+        }
+
+        let targetGuildId: string;
+        try {
+          targetGuildId = decodeURIComponent(playerControlMatch[1]).trim();
+        } catch {
+          throw new HttpRequestError(400, "ID do servidor inválido.");
+        }
+        if (!targetGuildId || targetGuildId === "all") {
+          throw new HttpRequestError(400, "Selecione um servidor específico para controlar o player.");
+        }
+
+        const actionPath = playerControlMatch[2];
+        const actor = {
+          id: session.account.id,
+          username: session.account.username,
+          displayName: session.account.displayName,
+        };
+
+        if (actionPath === "/toggle" && method === "POST") {
+          const result = await options.playerControl.togglePause(targetGuildId, actor);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/skip" && method === "POST") {
+          const result = await options.playerControl.skip(targetGuildId, actor);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/stop" && method === "POST") {
+          const result = await options.playerControl.stop(targetGuildId, actor);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/loop" && method === "POST") {
+          const body = await readJsonBody(req);
+          const modeRaw = body.mode !== undefined ? getStringField(body, "mode").trim() : undefined;
+          const result = await options.playerControl.setLoop(
+            targetGuildId,
+            actor,
+            modeRaw ? (modeRaw as "off" | "track" | "queue") : undefined,
+          );
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/shuffle" && method === "POST") {
+          const result = await options.playerControl.shuffle(targetGuildId, actor);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/volume" && method === "POST") {
+          const body = await readJsonBody(req);
+          const volume = typeof body.volume === "number" ? body.volume : Number(body.volume);
+          const result = await options.playerControl.setVolume(targetGuildId, actor, volume);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/seek" && method === "POST") {
+          const body = await readJsonBody(req);
+          const positionMs =
+            typeof body.positionMs === "number" ? body.positionMs : Number(body.positionMs);
+          const result = await options.playerControl.seek(targetGuildId, actor, positionMs);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/queue/jump" && method === "POST") {
+          const body = await readJsonBody(req);
+          const index = typeof body.index === "number" ? body.index : Number(body.index);
+          const result = await options.playerControl.jumpToQueueIndex(targetGuildId, actor, index);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/queue" && method === "POST") {
+          const body = await readJsonBody(req);
+          const query = getStringField(body, "query");
+          const platformRaw = getStringField(body, "platform").trim().toLowerCase();
+          const platform = platformRaw === "spotify" ? "spotify" : "youtube";
+          const result = await options.playerControl.enqueue(targetGuildId, actor, query, platform);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        if (actionPath === "/queue" && method === "DELETE") {
+          const result = await options.playerControl.clearQueue(targetGuildId, actor);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        const queueItemMatch = /^\/queue\/(\d+)$/.exec(actionPath);
+        if (queueItemMatch && method === "DELETE") {
+          const index = Number.parseInt(queueItemMatch[1], 10);
+          const result = await options.playerControl.removeQueueIndex(targetGuildId, actor, index);
+          sendJson(res, 200, { ok: true, message: result.message, live: options.getLiveSnapshot(targetGuildId) });
+          return;
+        }
+
+        sendJson(res, 404, { error: "Ação de controle não encontrada." });
         return;
       }
 

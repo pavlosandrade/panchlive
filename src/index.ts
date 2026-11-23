@@ -14,6 +14,7 @@ import {
 } from "./music/controls.js";
 import { createMusicManager, handleVoiceStateUpdate } from "./music/manager.js";
 import { detectTrackPlatform } from "./music/resolve.js";
+import { createWebPlayerController } from "./music/web-controller.js";
 import { StatsCollector } from "./stats/collector.js";
 import {
   createWebServer,
@@ -81,11 +82,12 @@ async function main(): Promise<void> {
         voiceChannelName: voiceChannel?.name ?? null,
         playing: player.playing,
         paused: player.paused,
+        volume: typeof player.volume === "number" ? player.volume : 100,
         repeatMode: player.repeatMode ?? "off",
         positionMs: player.position ?? 0,
         queueLength: player.queue.tracks.length,
         currentTrack: player.queue.current ? toLiveTrackSummary(player.queue.current) : null,
-        upcoming: player.queue.tracks.slice(0, 5).map(toLiveTrackSummary),
+        upcoming: player.queue.tracks.slice(0, 25).map(toLiveTrackSummary),
       });
     }
 
@@ -108,6 +110,8 @@ async function main(): Promise<void> {
     };
   };
 
+  const playerControl = createWebPlayerController({ lavalink, client });
+
   const webServer = createWebServer({
     db,
     isProduction: config.isProduction,
@@ -117,6 +121,7 @@ async function main(): Promise<void> {
     setupToken: config.dashboardSetupToken,
     getBotTag: () => client.user?.tag ?? "starting",
     getLiveSnapshot,
+    playerControl,
   });
 
   webServer.listen(config.httpPort, "0.0.0.0", () => {

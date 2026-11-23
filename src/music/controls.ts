@@ -15,6 +15,7 @@ import {
   formatDuration,
   formatProgressBar,
   formatQueueLines,
+  formatRequesterLabel,
   getPlatformTheme,
 } from "./resolve.js";
 
@@ -67,6 +68,22 @@ export function getRequesterId(track: Track | UnresolvedTrack | null | undefined
   return typeof req.id === "string" ? req.id : undefined;
 }
 
+export function getRequesterDisplayName(
+  track: Track | UnresolvedTrack | null | undefined,
+): string | undefined {
+  if (!track || !track.requester || typeof track.requester !== "object") {
+    return undefined;
+  }
+  const req = track.requester as Partial<RequesterInfo>;
+  if (typeof req.displayName === "string" && req.displayName.trim()) {
+    return req.displayName.trim();
+  }
+  if (typeof req.username === "string" && req.username.trim()) {
+    return req.username.trim();
+  }
+  return undefined;
+}
+
 export function getMemberVoiceChannelId(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
 ): string | null {
@@ -102,7 +119,7 @@ export function validateVoiceControl(
   return null;
 }
 
-function getNextRepeatMode(mode: RepeatMode | undefined): RepeatMode {
+export function getNextRepeatMode(mode: RepeatMode | undefined): RepeatMode {
   switch (mode) {
     case "off":
     case undefined:
@@ -136,6 +153,7 @@ export function buildNowPlayingEmbed(track: Track, player?: Player): EmbedBuilde
 
   const progress = formatProgressBar(player?.position ?? 0, track.info.duration, track.info.isStream);
   const requesterId = getRequesterId(track);
+  const requesterName = getRequesterDisplayName(track);
 
   const embed = new EmbedBuilder()
     .setAuthor({ name: theme.name })
@@ -148,7 +166,7 @@ export function buildNowPlayingEmbed(track: Track, player?: Player): EmbedBuilde
       { name: "Progresso", value: progress, inline: true },
       {
         name: "Pedido por",
-        value: requesterId ? `<@${requesterId}>` : "Desconhecido",
+        value: formatRequesterLabel(requesterId, requesterName),
         inline: true,
       },
     );
@@ -177,6 +195,7 @@ export function buildQueuedTrackEmbed(
   track: Track | UnresolvedTrack,
   position: number,
   requesterId: string,
+  requesterName?: string,
 ): EmbedBuilder {
   const duration = formatDuration(track.info.duration, track.info.isStream);
   const platform = detectTrackPlatform(track.info.sourceName, track.info.uri);
@@ -191,7 +210,7 @@ export function buildQueuedTrackEmbed(
     .addFields(
       { name: "Duração", value: `\`${duration}\``, inline: true },
       { name: "Posição na fila", value: `\`#${position}\``, inline: true },
-      { name: "Pedido por", value: `<@${requesterId}>`, inline: true },
+      { name: "Pedido por", value: formatRequesterLabel(requesterId, requesterName), inline: true },
     );
 
   const thumb = track.info.artworkUrl ?? getTrackBannerUrl(track);
@@ -208,10 +227,18 @@ export function buildPlaylistLoadedEmbed(options: {
   tracksAdded: (Track | UnresolvedTrack)[];
   totalPlaylistTracks: number;
   requesterId: string;
+  requesterName?: string;
   thumbnailUrl?: string | null;
 }): EmbedBuilder {
-  const { playlistTitle, playlistUri, tracksAdded, totalPlaylistTracks, requesterId, thumbnailUrl } =
-    options;
+  const {
+    playlistTitle,
+    playlistUri,
+    tracksAdded,
+    totalPlaylistTracks,
+    requesterId,
+    requesterName,
+    thumbnailUrl,
+  } = options;
 
   const firstTrack = tracksAdded[0];
   const platform = detectTrackPlatform(firstTrack?.info.sourceName, playlistUri ?? firstTrack?.info.uri);
@@ -236,7 +263,7 @@ export function buildPlaylistLoadedEmbed(options: {
         inline: true,
       },
       { name: "Duração total", value: `\`${formattedTotalDuration}\``, inline: true },
-      { name: "Pedido por", value: `<@${requesterId}>`, inline: true },
+      { name: "Pedido por", value: formatRequesterLabel(requesterId, requesterName), inline: true },
     );
 
   const thumb =
@@ -440,9 +467,13 @@ export function buildQueueEmbedForPlayer(player: Player): EmbedBuilder {
   const platform = detectTrackPlatform(current?.info.sourceName, current?.info.uri);
   const theme = getPlatformTheme(platform);
 
+  const currentRequesterId = getRequesterId(current);
+  const currentRequesterName = getRequesterDisplayName(current);
   const currentLine = current
     ? `**[${current.info.title}](${current.info.uri})** \`[${formatDuration(current.info.duration, current.info.isStream)}]\`${
-        getRequesterId(current) ? ` • <@${getRequesterId(current)}>` : ""
+        currentRequesterId || currentRequesterName
+          ? ` • ${formatRequesterLabel(currentRequesterId, currentRequesterName)}`
+          : ""
       }`
     : "Nenhuma música tocando agora.";
 
@@ -453,6 +484,7 @@ export function buildQueueEmbedForPlayer(player: Player): EmbedBuilder {
     duration: t.info.duration,
     isStream: t.info.isStream,
     requesterId: getRequesterId(t),
+    requesterName: getRequesterDisplayName(t),
   }));
 
   return new EmbedBuilder()

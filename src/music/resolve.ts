@@ -5,6 +5,24 @@ export interface SimpleTrackSummary {
   duration?: number;
   isStream?: boolean;
   requesterId?: string;
+  requesterName?: string;
+}
+
+export function formatRequesterLabel(requesterId?: string, requesterName?: string): string {
+  if (requesterId && /^\d+$/.test(requesterId)) {
+    return `<@${requesterId}>`;
+  }
+  const cleanName = requesterName?.trim();
+  if (cleanName) {
+    return `**${cleanName}** *(Dashboard)*`;
+  }
+  if (requesterId && requesterId.startsWith("dashboard:")) {
+    const fallback = requesterId.slice("dashboard:".length).trim();
+    if (fallback) {
+      return `**${fallback}** *(Dashboard)*`;
+    }
+  }
+  return "Desconhecido";
 }
 
 export type TrackPlatform = "spotify" | "youtube";
@@ -148,7 +166,10 @@ export function formatQueueLines(
     const duration = formatDuration(track.duration, track.isStream);
     const shortTitle = truncateTitle(track.title, 55);
     const titleLink = track.uri ? `[${shortTitle}](${track.uri})` : shortTitle;
-    const requester = track.requesterId ? ` • <@${track.requesterId}>` : "";
+    const requester =
+      track.requesterId || track.requesterName
+        ? ` • ${formatRequesterLabel(track.requesterId, track.requesterName)}`
+        : "";
     const line = `**${idx + 1}.** ${titleLink} \`[${duration}]\`${requester}`;
 
     if (lines.length > 0 && currentLength + line.length + 1 > maxChars - footerReserve) {

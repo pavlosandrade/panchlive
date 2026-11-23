@@ -9,7 +9,16 @@
     activePage: "dashboard",
     activeAdminTab: "accounts",
     liveTimer: null,
+    liveClockTimer: null,
     lastInviteCode: "",
+    liveUi: {
+      openQueues: new Set(),
+      drafts: new Map(),
+      scrubbing: false,
+      volumeTimers: new Map(),
+      pendingGuilds: new Set(),
+      liveClockEntries: [],
+    },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -143,15 +152,57 @@
       clearInterval(state.liveTimer);
       state.liveTimer = null;
     }
+    if (state.liveClockTimer) {
+      clearInterval(state.liveClockTimer);
+      state.liveClockTimer = null;
+    }
+  }
+
+  function isLiveControlFocused() {
+    if (state.liveUi.scrubbing) return true;
+    const active = document.activeElement;
+    const liveSection = $("live-section");
+    if (!active || !liveSection || !liveSection.contains(active)) {
+      return false;
+    }
+    const tag = active.tagName;
+    return tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA";
+  }
+
+  function tickLiveClocks() {
+    if (state.liveUi.scrubbing || document.hidden) return;
+    const now = Date.now();
+    for (const entry of state.liveUi.liveClockEntries) {
+      if (!entry.playing || entry.paused || entry.isStream || entry.durationMs <= 0) {
+        continue;
+      }
+      const elapsed = Math.max(0, now - entry.syncedAt);
+      const currentMs = Math.min(entry.durationMs, entry.basePositionMs + elapsed);
+      if (entry.clockEl) {
+        entry.clockEl.textContent = `${formatTrackClock(currentMs, false)} / ${formatTrackClock(entry.durationMs, false)}`;
+      }
+      if (entry.seekInput) {
+        entry.seekInput.value = String(Math.round(currentMs));
+        const pct = Math.min(100, Math.max(0, (currentMs / entry.durationMs) * 100));
+        entry.seekInput.style.setProperty("--range-pct", `${pct.toFixed(2)}%`);
+      }
+      if (entry.progFill) {
+        const pct = Math.min(100, Math.max(0, (currentMs / entry.durationMs) * 100));
+        entry.progFill.style.width = `${pct.toFixed(2)}%`;
+      }
+    }
   }
 
   function startLivePolling() {
     stopLivePolling();
     state.liveTimer = setInterval(() => {
       if (!document.hidden && state.account && state.activePage === "dashboard") {
-        void loadLive();
+        if (!isLiveControlFocused() && state.liveUi.pendingGuilds.size === 0) {
+          void loadLive();
+        }
       }
     }, 5000);
+    state.liveClockTimer = setInterval(tickLiveClocks, 1000);
   }
 
   function parseInviteFromHash() {
@@ -386,6 +437,144 @@
     }
   }
 
+  function makeSvgIcon(paths, size = 15) {
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    for (const def of paths) {
+      const node = document.createElementNS(svgNs, def.tag);
+      for (const [k, v] of Object.entries(def.attrs)) {
+        node.setAttribute(k, v);
+      }
+      svg.appendChild(node);
+    }
+    return svg;
+  }
+
+  const PLAYER_ICONS = {
+    play: () => makeSvgIcon([{ tag: "polygon", attrs: { points: "6 3 20 12 6 21 6 3", fill: "currentColor" } }]),
+    pause: () =>
+      makeSvgIcon([
+        { tag: "rect", attrs: { x: "6", y: "4", width: "4", height: "16", rx: "1", fill: "currentColor" } },
+        { tag: "rect", attrs: { x: "14", y: "4", width: "4", height: "16", rx: "1", fill: "currentColor" } },
+      ]),
+    skip: () =>
+      makeSvgIcon([
+        { tag: "polygon", attrs: { points: "5 4 15 12 5 20 5 4" } },
+        { tag: "line", attrs: { x1: "19", y1: "5", x2: "19", y2: "19" } },
+      ]),
+    stop: () => makeSvgIcon([{ tag: "rect", attrs: { x: "5", y: "5", width: "14", height: "14", rx: "2", fill: "currentColor" } }]),
+    loop: () =>
+      makeSvgIcon([
+        { tag: "polyline", attrs: { points: "17 1 21 5 17 9" } },
+        { tag: "path", attrs: { d: "M3 11V9a4 4 0 0 1 4-4h14" } },
+        { tag: "polyline", attrs: { points: "7 23 3 19 7 15" } },
+        { tag: "path", attrs: { d: "M21 13v2a4 4 0 0 1-4 4H3" } },
+      ]),
+    shuffle: () =>
+      makeSvgIcon([
+        { tag: "polyline", attrs: { points: "16 3 21 3 21 8" } },
+        { tag: "line", attrs: { x1: "4", y1: "20", x2: "21", y2: "3" } },
+        { tag: "polyline", attrs: { points: "21 16 21 21 16 21" } },
+        { tag: "line", attrs: { x1: "15", y1: "15", x2: "21", y2: "21" } },
+        { tag: "line", attrs: { x1: "4", y1: "4", x2: "9", y2: "9" } },
+      ]),
+    volume: () =>
+      makeSvgIcon([
+        { tag: "polygon", attrs: { points: "11 5 6 9 2 9 2 15 6 15 11 19 11 5" } },
+        { tag: "path", attrs: { d: "M15.54 8.46a5 5 0 0 1 0 7.07" } },
+        { tag: "path", attrs: { d: "M19.07 4.93a10 10 0 0 1 0 14.14" } },
+      ]),
+    trash: () =>
+      makeSvgIcon(
+        [
+          { tag: "polyline", attrs: { points: "3 6 5 6 21 6" } },
+          { tag: "path", attrs: { d: "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" } },
+          { tag: "path", attrs: { d: "M10 11v6" } },
+          { tag: "path", attrs: { d: "M14 11v6" } },
+        ],
+        13,
+      ),
+  };
+
+  function translateRepeatLabel(mode) {
+    if (mode === "track") return "Loop: Música";
+    if (mode === "queue") return "Loop: Fila";
+    return "Loop: Off";
+  }
+
+  function selectGuildForControl(guildId, guildName) {
+    const select = $("guild-select");
+    if (select) {
+      let hasOption = false;
+      for (const opt of select.options) {
+        if (opt.value === guildId) {
+          hasOption = true;
+          break;
+        }
+      }
+      if (!hasOption) {
+        const opt = el("option", "", guildName || guildId);
+        opt.value = guildId;
+        select.appendChild(opt);
+      }
+      select.value = guildId;
+    }
+    state.guildId = guildId;
+    void loadDashboardData();
+  }
+
+  async function sendPlayerAction(guildId, actionPath, options = {}) {
+    if (!guildId || guildId === "all") return false;
+    if (state.liveUi.pendingGuilds.has(guildId)) return false;
+
+    state.liveUi.pendingGuilds.add(guildId);
+    try {
+      const res = await api(`/api/player/${encodeURIComponent(guildId)}${actionPath}`, {
+        method: options.method || "POST",
+        body: options.body,
+      });
+      if (options.showToast !== false && res.message) {
+        showToast(res.message, "success");
+      }
+      if (res.live) {
+        renderLive(res.live);
+      } else {
+        await loadLive();
+      }
+      if (options.followUpRefresh) {
+        setTimeout(() => {
+          if (
+            !document.hidden &&
+            state.account &&
+            state.activePage === "dashboard" &&
+            !isLiveControlFocused()
+          ) {
+            void loadLive();
+          }
+        }, 900);
+      }
+      return true;
+    } catch (err) {
+      if (err && (err.status === 401 || err.status === 426)) {
+        handleSessionError(err);
+      } else {
+        showToast(err?.message || "Falha ao executar comando no bot.", "error");
+      }
+      return false;
+    } finally {
+      state.liveUi.pendingGuilds.delete(guildId);
+    }
+  }
+
   async function loadLive() {
     const guildParam =
       state.guildId && state.guildId !== "all"
@@ -411,7 +600,7 @@
       nodesBox.appendChild(badge);
     }
 
-    const activePlayers = live.players.filter((p) => p.currentTrack);
+    const activePlayers = live.players.filter((p) => p.currentTrack || p.voiceChannelName);
     const liveSection = $("live-section");
     const hasActive = activePlayers.length > 0;
     liveSection.classList.toggle("live-active", hasActive);
@@ -420,79 +609,452 @@
 
     const container = $("live-content");
     clearEl(container);
+    state.liveUi.liveClockEntries = [];
     container.classList.toggle("hidden", !hasActive);
 
     if (!hasActive) {
       return;
     }
 
+    const isAdmin = state.account?.role === "admin";
+    const hasSpecificGuild = Boolean(state.guildId && state.guildId !== "all");
+    const syncedAt = Date.now();
+
     for (const player of activePlayers) {
-      const card = el("div", "live-player-card");
+      const canControl = isAdmin && hasSpecificGuild && player.guildId === state.guildId;
+      const card = el("div", `live-player-card ${canControl ? "live-player-controllable" : ""}`);
+
       const head = el("div", "live-player-head");
-      const guildLabel = el(
-        "div",
-        "small-text muted",
-        player.voiceChannelName ? `${player.guildName} • #${player.voiceChannelName}` : player.guildName,
-      );
-      const statusBadge = el(
-        "span",
-        `badge ${player.paused ? "badge-warning" : "badge-success"}`,
-        player.paused ? "Pausado" : "Tocando",
-      );
-      head.append(guildLabel, statusBadge);
+      const guildWrap = el("div", "live-guild-pill-row");
+      const guildBadge = el("span", "live-guild-name", player.guildName);
+      guildWrap.appendChild(guildBadge);
+      if (player.voiceChannelName) {
+        guildWrap.appendChild(el("span", "small-text muted", `#${player.voiceChannelName}`));
+      }
+
+      const headRight = el("div", "live-head-actions");
+      if (isAdmin && !hasSpecificGuild) {
+        const focusBtn = el("button", "player-select-guild-btn", "Controlar este servidor");
+        focusBtn.type = "button";
+        focusBtn.addEventListener("click", () => {
+          selectGuildForControl(player.guildId, player.guildName);
+        });
+        headRight.appendChild(focusBtn);
+      }
+
+      const statusLabel = !player.currentTrack
+        ? "Na call (ocioso)"
+        : player.paused
+          ? "Pausado"
+          : "Tocando";
+      const statusCls = !player.currentTrack
+        ? ""
+        : player.paused
+          ? "badge-warning"
+          : "badge-success";
+      headRight.appendChild(el("span", `badge ${statusCls}`, statusLabel));
+      head.append(guildWrap, headRight);
       card.appendChild(head);
 
       const track = player.currentTrack;
-      const row = el("div", "live-track-row");
-      const art = safeHttpsUrl(track.artworkUrl);
-      if (art) {
-        const img = document.createElement("img");
-        img.src = art;
-        img.alt = "";
-        img.className = "track-cover";
-        img.loading = "lazy";
-        row.appendChild(img);
+      if (track) {
+        const row = el("div", "live-track-row");
+        const art = safeHttpsUrl(track.artworkUrl);
+        if (art) {
+          const img = document.createElement("img");
+          img.src = art;
+          img.alt = "";
+          img.className = "track-cover";
+          img.loading = "lazy";
+          row.appendChild(img);
+        } else {
+          row.appendChild(el("div", "track-cover-placeholder", "♪"));
+        }
+
+        const info = el("div", "rank-main");
+        const linkUrl = safeHttpUrl(track.uri);
+        if (linkUrl) {
+          const a = el("a", "rank-title", track.title);
+          a.href = linkUrl;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          info.appendChild(a);
+        } else {
+          info.appendChild(el("div", "rank-title", track.title));
+        }
+        const metaParts = [];
+        if (track.author) metaParts.push(track.author);
+        if (track.requesterName) metaParts.push(`Pedido por ${track.requesterName}`);
+        info.appendChild(el("div", "rank-meta", metaParts.join(" • ") || "Em reprodução"));
+        row.appendChild(info);
+        card.appendChild(row);
+
+        const pct =
+          !track.isStream && track.durationMs > 0
+            ? Math.min(100, Math.max(0, (player.positionMs / track.durationMs) * 100))
+            : 100;
+
+        const clockText = track.isStream
+          ? "AO VIVO"
+          : `${formatTrackClock(player.positionMs, false)} / ${formatTrackClock(track.durationMs, false)}`;
+        const clockEl = el("span", "live-clock-text", clockText);
+
+        let seekInput = null;
+        let progFill = null;
+
+        if (canControl && !track.isStream && track.durationMs > 0) {
+          const seekWrap = el("div", "live-seek-wrap");
+          seekInput = document.createElement("input");
+          seekInput.type = "range";
+          seekInput.className = "live-range live-seek-slider";
+          seekInput.min = "0";
+          seekInput.max = String(track.durationMs);
+          seekInput.step = "1000";
+          seekInput.value = String(Math.min(track.durationMs, Math.max(0, Math.round(player.positionMs))));
+          seekInput.style.setProperty("--range-pct", `${pct.toFixed(2)}%`);
+          seekInput.setAttribute("aria-label", "Posição da música");
+
+          seekInput.addEventListener("pointerdown", () => {
+            state.liveUi.scrubbing = true;
+          });
+          seekInput.addEventListener("input", () => {
+            state.liveUi.scrubbing = true;
+            const pos = Number(seekInput.value);
+            const nextPct = track.durationMs > 0 ? Math.min(100, Math.max(0, (pos / track.durationMs) * 100)) : 0;
+            seekInput.style.setProperty("--range-pct", `${nextPct.toFixed(2)}%`);
+            clockEl.textContent = `${formatTrackClock(pos, false)} / ${formatTrackClock(track.durationMs, false)}`;
+          });
+          seekInput.addEventListener("change", () => {
+            state.liveUi.scrubbing = false;
+            const pos = Number(seekInput.value);
+            void sendPlayerAction(player.guildId, "/seek", {
+              body: { positionMs: pos },
+              showToast: false,
+            });
+          });
+          seekInput.addEventListener("blur", () => {
+            state.liveUi.scrubbing = false;
+          });
+
+          seekWrap.appendChild(seekInput);
+          card.appendChild(seekWrap);
+        } else {
+          const progWrap = el("div", "progress-track");
+          progFill = el("div", "progress-fill");
+          progFill.style.width = `${pct.toFixed(2)}%`;
+          progWrap.appendChild(progFill);
+          card.appendChild(progWrap);
+        }
+
+        state.liveUi.liveClockEntries.push({
+          playing: player.playing,
+          paused: player.paused,
+          isStream: track.isStream,
+          durationMs: track.durationMs,
+          basePositionMs: player.positionMs,
+          syncedAt,
+          clockEl,
+          seekInput,
+          progFill,
+        });
+
+        const foot = el("div", "bar-row-head muted");
+        foot.append(
+          clockEl,
+          el("span", "", `${player.queueLength} na fila • ${translateRepeatLabel(player.repeatMode)}`),
+        );
+        card.appendChild(foot);
       } else {
-        row.appendChild(el("div", "track-cover-placeholder", "♪"));
+        card.appendChild(
+          el("div", "small-text muted", "Bot conectado na call aguardando uma nova música."),
+        );
       }
 
-      const info = el("div", "rank-main");
-      const linkUrl = safeHttpUrl(track.uri);
-      if (linkUrl) {
-        const a = el("a", "rank-title", track.title);
-        a.href = linkUrl;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        info.appendChild(a);
-      } else {
-        info.appendChild(el("div", "rank-title", track.title));
+      if (canControl) {
+        const controlsBar = el("div", "player-controls-row");
+        const buttonsGroup = el("div", "player-controls-buttons");
+
+        if (track) {
+          const toggleBtn = el("button", "player-btn player-btn-primary");
+          toggleBtn.type = "button";
+          toggleBtn.append(
+            player.paused ? PLAYER_ICONS.play() : PLAYER_ICONS.pause(),
+            el("span", "", player.paused ? "Retomar" : "Pausar"),
+          );
+          toggleBtn.addEventListener("click", () => {
+            void sendPlayerAction(player.guildId, "/toggle");
+          });
+          buttonsGroup.appendChild(toggleBtn);
+
+          const skipBtn = el("button", "player-btn");
+          skipBtn.type = "button";
+          skipBtn.title = "Pular música atual";
+          skipBtn.append(PLAYER_ICONS.skip(), el("span", "", "Pular"));
+          skipBtn.addEventListener("click", () => {
+            void sendPlayerAction(player.guildId, "/skip", { followUpRefresh: true });
+          });
+          buttonsGroup.appendChild(skipBtn);
+
+          const loopBtn = el("button", `player-btn ${player.repeatMode !== "off" ? "is-active" : ""}`);
+          loopBtn.type = "button";
+          loopBtn.title = "Alternar modo de repetição";
+          loopBtn.append(PLAYER_ICONS.loop(), el("span", "", translateRepeatLabel(player.repeatMode)));
+          loopBtn.addEventListener("click", () => {
+            void sendPlayerAction(player.guildId, "/loop", { body: {} });
+          });
+          buttonsGroup.appendChild(loopBtn);
+
+          const shuffleBtn = el("button", "player-btn");
+          shuffleBtn.type = "button";
+          shuffleBtn.disabled = player.queueLength < 2;
+          shuffleBtn.title =
+            player.queueLength < 2
+              ? "Adicione pelo menos 2 músicas na fila para embaralhar"
+              : "Embaralhar fila";
+          shuffleBtn.append(PLAYER_ICONS.shuffle(), el("span", "", "Shuffle"));
+          shuffleBtn.addEventListener("click", () => {
+            void sendPlayerAction(player.guildId, "/shuffle");
+          });
+          buttonsGroup.appendChild(shuffleBtn);
+        }
+
+        const stopBtn = el("button", "player-btn player-btn-danger");
+        stopBtn.type = "button";
+        stopBtn.title = "Parar reprodução e desconectar da call";
+        stopBtn.append(PLAYER_ICONS.stop(), el("span", "", "Parar"));
+        stopBtn.addEventListener("click", () => {
+          if (
+            !window.confirm(
+              `Parar a reprodução, limpar a fila e desconectar do servidor "${player.guildName}"?`,
+            )
+          ) {
+            return;
+          }
+          void sendPlayerAction(player.guildId, "/stop");
+        });
+        buttonsGroup.appendChild(stopBtn);
+        controlsBar.appendChild(buttonsGroup);
+
+        const volVal = typeof player.volume === "number" ? Math.max(0, Math.min(100, Math.round(player.volume))) : 100;
+        const volWrap = el("div", "player-volume-wrap");
+        const volIcon = PLAYER_ICONS.volume();
+        const volSlider = document.createElement("input");
+        volSlider.type = "range";
+        volSlider.className = "live-range live-volume-slider";
+        volSlider.min = "0";
+        volSlider.max = "100";
+        volSlider.step = "5";
+        volSlider.value = String(volVal);
+        volSlider.style.setProperty("--range-pct", `${volVal}%`);
+        volSlider.setAttribute("aria-label", "Volume do bot");
+
+        const volText = el("span", "player-volume-label", `${volVal}%`);
+
+        const commitVolume = (nextVol, showNotice) => {
+          const prevTimer = state.liveUi.volumeTimers.get(player.guildId);
+          if (prevTimer) {
+            clearTimeout(prevTimer);
+            state.liveUi.volumeTimers.delete(player.guildId);
+          }
+          void sendPlayerAction(player.guildId, "/volume", {
+            body: { volume: nextVol },
+            showToast: showNotice,
+          });
+        };
+
+        volSlider.addEventListener("pointerdown", () => {
+          state.liveUi.scrubbing = true;
+        });
+        volSlider.addEventListener("input", () => {
+          state.liveUi.scrubbing = true;
+          const nextVol = Number(volSlider.value);
+          volSlider.style.setProperty("--range-pct", `${nextVol}%`);
+          volText.textContent = `${nextVol}%`;
+          const prevTimer = state.liveUi.volumeTimers.get(player.guildId);
+          if (prevTimer) clearTimeout(prevTimer);
+          state.liveUi.volumeTimers.set(
+            player.guildId,
+            setTimeout(() => commitVolume(nextVol, false), 180),
+          );
+        });
+        volSlider.addEventListener("change", () => {
+          state.liveUi.scrubbing = false;
+          commitVolume(Number(volSlider.value), false);
+        });
+        volSlider.addEventListener("blur", () => {
+          state.liveUi.scrubbing = false;
+        });
+
+        volWrap.append(volIcon, volSlider, volText);
+        controlsBar.appendChild(volWrap);
+        card.appendChild(controlsBar);
+
+        // Formulário inline: Adicionar música ou playlist à fila do servidor selecionado
+        const savedDraft = state.liveUi.drafts.get(player.guildId) || { query: "", platform: "youtube" };
+        const enqueueForm = el("form", "live-enqueue-form");
+        const queryInput = document.createElement("input");
+        queryInput.type = "text";
+        queryInput.className = "live-enqueue-input";
+        queryInput.placeholder = "Adicionar música ou colar link do YouTube/Spotify";
+        queryInput.maxLength = 300;
+        queryInput.value = savedDraft.query;
+        queryInput.addEventListener("input", () => {
+          state.liveUi.drafts.set(player.guildId, {
+            query: queryInput.value,
+            platform: platSelect.value,
+          });
+        });
+
+        const platSelect = document.createElement("select");
+        platSelect.className = "live-enqueue-select";
+        platSelect.setAttribute("aria-label", "Plataforma da busca");
+        const ytOpt = el("option", "", "YouTube");
+        ytOpt.value = "youtube";
+        const spOpt = el("option", "", "Spotify");
+        spOpt.value = "spotify";
+        platSelect.append(ytOpt, spOpt);
+        platSelect.value = savedDraft.platform;
+        platSelect.addEventListener("change", () => {
+          state.liveUi.drafts.set(player.guildId, {
+            query: queryInput.value,
+            platform: platSelect.value,
+          });
+        });
+
+        const addBtn = el("button", "btn btn-primary btn-sm live-enqueue-btn", "Adicionar");
+        addBtn.type = "submit";
+
+        enqueueForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const q = queryInput.value.trim();
+          if (!q) {
+            queryInput.focus();
+            return;
+          }
+          const prevDraft = { query: q, platform: platSelect.value };
+          addBtn.disabled = true;
+          addBtn.textContent = "Buscando...";
+          state.liveUi.drafts.set(player.guildId, { query: "", platform: platSelect.value });
+          queryInput.blur();
+          const ok = await sendPlayerAction(player.guildId, "/queue", {
+            body: { query: q, platform: platSelect.value },
+            followUpRefresh: true,
+          });
+          if (!ok) {
+            state.liveUi.drafts.set(player.guildId, prevDraft);
+            if (document.body.contains(addBtn)) {
+              addBtn.disabled = false;
+              addBtn.textContent = "Adicionar";
+            }
+          }
+        });
+
+        enqueueForm.append(queryInput, platSelect, addBtn);
+        card.appendChild(enqueueForm);
+      } else if (isAdmin && !hasSpecificGuild) {
+        card.appendChild(
+          el(
+            "div",
+            "live-control-hint",
+            "Selecione este servidor acima para habilitar os controles remotos sem afetar outros servidores.",
+          ),
+        );
       }
-      const metaParts = [];
-      if (track.author) metaParts.push(track.author);
-      if (track.requesterName) metaParts.push(`Pedido por ${track.requesterName}`);
-      info.appendChild(el("div", "rank-meta", metaParts.join(" • ") || "Em reprodução"));
-      row.appendChild(info);
-      card.appendChild(row);
 
-      const pct =
-        !track.isStream && track.durationMs > 0
-          ? Math.min(100, Math.max(0, Math.round((player.positionMs / track.durationMs) * 100)))
-          : 100;
-      const progWrap = el("div", "progress-track");
-      const progFill = el("div", "progress-fill");
-      progFill.style.width = `${pct}%`;
-      progWrap.appendChild(progFill);
-      card.appendChild(progWrap);
+      // Lista expansível das próximas faixas na fila
+      if (player.upcoming && player.upcoming.length > 0) {
+        const isOpen = state.liveUi.openQueues.has(player.guildId);
+        const queueSec = el("div", "live-queue-section");
+        const queueHead = el("div", "live-queue-head");
 
-      const foot = el("div", "bar-row-head muted");
-      const clockText = track.isStream
-        ? "AO VIVO"
-        : `${formatTrackClock(player.positionMs, false)} / ${formatTrackClock(track.durationMs, false)}`;
-      foot.append(
-        el("span", "", clockText),
-        el("span", "", `${player.queueLength} na fila • Loop: ${player.repeatMode}`),
-      );
-      card.appendChild(foot);
+        const toggleQueueBtn = el(
+          "button",
+          "live-queue-toggle",
+          `${isOpen ? "▾" : "▸"} Próximas na fila (${player.queueLength})`,
+        );
+        toggleQueueBtn.type = "button";
+        toggleQueueBtn.addEventListener("click", () => {
+          if (state.liveUi.openQueues.has(player.guildId)) {
+            state.liveUi.openQueues.delete(player.guildId);
+          } else {
+            state.liveUi.openQueues.add(player.guildId);
+          }
+          renderLive(live);
+        });
+        queueHead.appendChild(toggleQueueBtn);
+
+        if (canControl) {
+          const clearBtn = el("button", "live-queue-clear-btn", "Limpar fila");
+          clearBtn.type = "button";
+          clearBtn.addEventListener("click", () => {
+            if (!window.confirm(`Remover todas as ${player.queueLength} música(s) da fila de "${player.guildName}"?`)) {
+              return;
+            }
+            void sendPlayerAction(player.guildId, "/queue", { method: "DELETE" });
+          });
+          queueHead.appendChild(clearBtn);
+        }
+
+        queueSec.appendChild(queueHead);
+
+        if (isOpen) {
+          const list = el("div", "live-queue-list");
+          player.upcoming.forEach((item, idx) => {
+            const qRow = el("div", "live-queue-item");
+            qRow.appendChild(el("span", "live-queue-idx", `#${idx + 1}`));
+
+            const qMain = el("div", "live-queue-main");
+            const qTitle = el("div", "live-queue-title", item.title);
+            const qMetaParts = [];
+            if (item.author) qMetaParts.push(item.author);
+            qMetaParts.push(formatTrackClock(item.durationMs, item.isStream));
+            if (item.requesterName) qMetaParts.push(item.requesterName);
+            qMain.append(qTitle, el("div", "live-queue-meta", qMetaParts.join(" • ")));
+            qRow.appendChild(qMain);
+
+            if (canControl) {
+              const qActs = el("div", "live-queue-actions");
+              const playNowBtn = el("button", "live-q-btn", "Tocar");
+              playNowBtn.type = "button";
+              playNowBtn.title = "Pular para esta música";
+              playNowBtn.addEventListener("click", () => {
+                void sendPlayerAction(player.guildId, "/queue/jump", {
+                  body: { index: idx },
+                  followUpRefresh: true,
+                });
+              });
+
+              const removeBtn = el("button", "live-q-btn live-q-btn-danger");
+              removeBtn.type = "button";
+              removeBtn.title = "Remover da fila";
+              removeBtn.setAttribute("aria-label", `Remover ${item.title} da fila`);
+              removeBtn.appendChild(PLAYER_ICONS.trash());
+              removeBtn.addEventListener("click", () => {
+                void sendPlayerAction(player.guildId, `/queue/${idx}`, { method: "DELETE" });
+              });
+
+              qActs.append(playNowBtn, removeBtn);
+              qRow.appendChild(qActs);
+            }
+
+            list.appendChild(qRow);
+          });
+
+          if (player.queueLength > player.upcoming.length) {
+            list.appendChild(
+              el(
+                "div",
+                "live-queue-more",
+                `+ ${player.queueLength - player.upcoming.length} música(s) na fila`,
+              ),
+            );
+          }
+
+          queueSec.appendChild(list);
+        }
+
+        card.appendChild(queueSec);
+      }
 
       container.appendChild(card);
     }

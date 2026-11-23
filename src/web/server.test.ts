@@ -10,6 +10,7 @@ import {
   upsertDiscordUser,
 } from "../stats/repository.js";
 import { createWebServer, type LiveSnapshot } from "./server.js";
+import type { PlayerControlService } from "../music/web-controller.js";
 
 interface MockResponseResult {
   status: number;
@@ -472,6 +473,189 @@ describe("web/server", () => {
         headers: { "X-Forwarded-Proto": "https", Cookie: viewerCookie },
       });
       assert.equal(afterLogout.status, 401);
+    } finally {
+      server.close();
+      db.close();
+    }
+  });
+
+  it("protege rotas de controle do player por RBAC (somente admin), CSRF, HTTPS e servidor específico", async () => {
+    const db = openDatabase(":memory:");
+    const recordedActions: string[] = [];
+
+    const mockControl: PlayerControlService = {
+      async togglePause(guildId) {
+        recordedActions.push(`toggle:${guildId}`);
+        return { message: "Reprodução pausada." };
+      },
+      async skip(guildId) {
+        recordedActions.push(`skip:${guildId}`);
+        return { message: "Pulou." };
+      },
+      async stop(guildId) {
+        recordedActions.push(`stop:${guildId}`);
+        return { message: "Parado." };
+      },
+      async setLoop(guildId, _actor, mode) {
+        recordedActions.push(`loop:${guildId}:${mode ?? "next"}`);
+        return { message: "Loop atualizado." };
+      },
+      async shuffle(guildId) {
+        recordedActions.push(`shuffle:${guildId}`);
+        return { message: "Fila embaralhada." };
+      },
+      async setVolume(guildId, _actor, vol) {
+        recordedActions.push(`volume:${guildId}:${vol}`);
+        return { message: `Volume ${vol}%.` };
+      },
+      async seek(guildId, _actor, pos) {
+        recordedActions.push(`seek:${guildId}:${pos}`);
+        return { message: "Posição atualizada." };
+      },
+      async jumpToQueueIndex(guildId, _actor, index) {
+        recordedActions.push(`jump:${guildId}:${index}`);
+        return { message: "Pulou para faixa." };
+      },
+      async removeQueueIndex(guildId, _actor, index) {
+        recordedActions.push(`remove:${guildId}:${index}`);
+        return { message: "Removida." };
+      },
+      async clearQueue(guildId) {
+        recordedActions.push(`clear:${guildId}`);
+        return { message: "Limpa." };
+      },
+      async enqueue(guildId, _actor, query, platform) {
+        recordedActions.push(`enqueue:${guildId}:${platform}:${query}`);
+        return { message: "Adicionada." };
+      },
+    };
+
+    const server = createWebServer({
+      db,
+      isProduction: true,
+      trustProxy: true,
+      requireHttps: true,
+      setupToken: "tok-ctrl-12345678",
+      getBotTag: () => "PanchLive#0001",
+      getLiveSnapshot: () => dummyLive,
+      playerControl: mockControl,
+    });
+
+    const httpsHeaders = {
+      "X-Forwarded-Proto": "https",
+      "Content-Type": "application/json",
+      "X-Requested-With": "fetch",
+    };
+
+    try {
+      const setupRes = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/auth/setup",
+        headers: httpsHeaders,
+        body: {
+          setupToken: "tok-ctrl-12345678",
+          username: "owner",
+          displayName: "Owner",
+          password: "OwnerPassword123",
+        },
+      });
+      assert.equal(setupRes.status, 201);
+      const adminCookie = extractCookiePair(setupRes.getHeader("set-cookie"));
+
+      // Cria conta viewer
+      const createViewer = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/accounts",
+        headers: { ...httpsHeaders, Cookie: adminCookie },
+        body: {
+          username: "guest",
+          displayName: "Guest",
+          password: "GuestPassword123",
+          role: "viewer",
+        },
+      });
+      assert.equal(createViewer.status, 201);
+
+      const loginViewer = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/auth/login",
+        headers: httpsHeaders,
+        body: { username: "guest", password: "GuestPassword123" },
+      });
+      assert.equal(loginViewer.status, 200);
+      const viewerCookie = extractCookiePair(loginViewer.getHeader("set-cookie"));
+
+      // Viewer bloqueado (403)
+      const viewerToggle = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/guild-1/toggle",
+        headers: { ...httpsHeaders, Cookie: viewerCookie },
+        body: {},
+      });
+      assert.equal(viewerToggle.status, 403);
+
+      // Sem HTTPS -> 426
+      const httpToggle = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/guild-1/toggle",
+        headers: { "X-Requested-With": "fetch", Cookie: adminCookie },
+      });
+      assert.equal(httpToggle.status, 426);
+
+      // Sem CSRF -> 403
+      const noCsrf = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/guild-1/toggle",
+        headers: { "X-Forwarded-Proto": "https", Cookie: adminCookie },
+      });
+      assert.equal(noCsrf.status, 403);
+
+      // guildId="all" é rejeitado (400)
+      const allGuilds = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/all/toggle",
+        headers: { ...httpsHeaders, Cookie: adminCookie },
+      });
+      assert.equal(allGuilds.status, 400);
+
+      // Admin executa ações isoladas no guild-1
+      const toggleOk = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/guild-1/toggle",
+        headers: { ...httpsHeaders, Cookie: adminCookie },
+      });
+      assert.equal(toggleOk.status, 200);
+      assert.equal(toggleOk.json<{ ok: boolean; live: LiveSnapshot }>().ok, true);
+
+      const volOk = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/guild-1/volume",
+        headers: { ...httpsHeaders, Cookie: adminCookie },
+        body: { volume: 65 },
+      });
+      assert.equal(volOk.status, 200);
+
+      const enqueueOk = await dispatchRequest(server, {
+        method: "POST",
+        path: "/api/player/guild-1/queue",
+        headers: { ...httpsHeaders, Cookie: adminCookie },
+        body: { query: "daft punk", platform: "spotify" },
+      });
+      assert.equal(enqueueOk.status, 200);
+
+      const delOk = await dispatchRequest(server, {
+        method: "DELETE",
+        path: "/api/player/guild-1/queue/2",
+        headers: { ...httpsHeaders, Cookie: adminCookie },
+      });
+      assert.equal(delOk.status, 200);
+
+      assert.deepEqual(recordedActions, [
+        "toggle:guild-1",
+        "volume:guild-1:65",
+        "enqueue:guild-1:spotify:daft punk",
+        "remove:guild-1:2",
+      ]);
     } finally {
       server.close();
       db.close();

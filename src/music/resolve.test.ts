@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatProgressBar,
   formatQueueLines,
+  formatRequesterLabel,
   formatTrackErrorReason,
   getPlatformTheme,
   isUrlQuery,
@@ -213,5 +214,17 @@ Client [WEB_EMBEDDED_PLAYER] failed: This video is unavailable`;
   it("usa a mensagem genérica quando não há exceção", () => {
     assert.equal(formatTrackErrorReason(undefined), GENERIC_TRACK_ERROR_REASON);
     assert.equal(formatTrackErrorReason(""), GENERIC_TRACK_ERROR_REASON);
+  });
+});
+
+describe("formatRequesterLabel", () => {
+  it("formata IDs numéricos do Discord como menção", () => {
+    assert.equal(formatRequesterLabel("123456789012345678", "Pavlos"), "<@123456789012345678>");
+  });
+
+  it("formata pedidos vindos da dashboard sem menção quebrada", () => {
+    assert.equal(formatRequesterLabel("dashboard:pavlos", "Pavlos"), "**Pavlos** *(Dashboard)*");
+    assert.equal(formatRequesterLabel("dashboard:pavlos"), "**pavlos** *(Dashboard)*");
+    assert.equal(formatRequesterLabel(undefined, undefined), "Desconhecido");
   });
 });
